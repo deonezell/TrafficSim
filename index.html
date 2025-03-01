@@ -227,7 +227,7 @@
             // Store gate properties
             const gate = {
                 mesh: gateGroup,
-                isOpen: false,
+                isOpen: false, // Default to closed
                 arm: arm,
                 originalRotation: arm.rotation.z,
                 openRotation: -Math.PI/2,
@@ -249,9 +249,13 @@
             if (gate.isOpen) {
                 // Animate to open position
                 gate.arm.rotation.z = gate.openRotation;
+                // Update color to green when open
+                gate.arm.material.color.set(0x00FF00);
             } else {
                 // Animate to closed position
                 gate.arm.rotation.z = gate.originalRotation;
+                // Update color to red when closed
+                gate.arm.material.color.set(0xFF0000);
             }
         }
         
@@ -318,15 +322,18 @@
                 
                 if (car.finished) continue;
                 
-                // Move car forward
+                // Store original position
+                const originalZ = car.mesh.position.z;
+                
+                // Try to move car forward
                 car.mesh.position.z -= car.speed;
                 
                 // Check for collisions with gates
                 const canPass = checkGatePassage(car);
                 
                 if (!canPass) {
-                    // Car can't pass, move it back
-                    car.mesh.position.z += car.speed;
+                    // Car can't pass, move it back to original position
+                    car.mesh.position.z = originalZ;
                 }
                 
                 // Check if car reached point B
@@ -353,13 +360,17 @@
                 const dist = Math.abs(carPos.z - gatePos.z);
                 
                 if (dist < CAR_SIZE && 
-                    Math.abs(carPos.x - gatePos.x) < ROAD_WIDTH/4) {
+                    Math.abs(carPos.x - gatePos.x) < ROAD_WIDTH/3) {
                     // Car is at the gate, check if gate is open
-                    return gate.isOpen;
+                    // If gate is closed, car cannot pass
+                    if (!gate.isOpen) {
+                        console.log("Car stopped by gate at", gatePos);
+                        return false;
+                    }
                 }
             }
             
-            // No gate blocking
+            // No gate blocking or all gates are open
             return true;
         }
         
@@ -469,6 +480,14 @@
         
         // Add click event detection for gates
         window.addEventListener('click', (event) => {
+            // Don't handle clicks on UI elements
+            if (event.target.tagName === 'BUTTON' || 
+                event.target.tagName === 'INPUT' || 
+                event.target.closest('#controls') ||
+                event.target.closest('#info')) {
+                return;
+            }
+            
             const raycaster = new THREE.Raycaster();
             const mouse = new THREE.Vector2();
             
@@ -489,6 +508,7 @@
                 while (parent) {
                     if (parent.userData && parent.userData.clickable) {
                         toggleGate(parent.userData.gate);
+                        console.log("Gate toggled:", parent.userData.gate.isOpen ? "open" : "closed");
                         break;
                     }
                     parent = parent.parent;
