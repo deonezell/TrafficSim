@@ -3,14 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neighborhood Traffic Flow Simulation</title>
+    <title>Basic Traffic Flow Simulation</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            font-family: Arial, sans-serif;
-        }
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
         #info {
             position: absolute;
             top: 10px;
@@ -19,7 +15,6 @@
             color: white;
             padding: 10px;
             border-radius: 5px;
-            max-width: 300px;
             z-index: 100;
         }
         #controls {
@@ -30,7 +25,6 @@
             color: white;
             padding: 10px;
             border-radius: 5px;
-            max-width: 300px;
             z-index: 100;
         }
         button {
@@ -42,23 +36,15 @@
             border-radius: 4px;
             cursor: pointer;
         }
-        button:hover {
-            background: #45a049;
-        }
-        .slider-container {
-            margin: 10px 0;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-        }
+        button:hover { background: #45a049; }
+        .slider-container { margin: 10px 0; }
+        label { display: block; margin-bottom: 5px; }
     </style>
 </head>
 <body>
     <div id="info">
-        <h2>Neighborhood Traffic Flow</h2>
-        <p>Cars: <span id="car-count">0</span>/<span id="total-cars-display">100</span></p>
-        <p>Average Travel Time: <span id="avg-time">0.0</span>s</p>
+        <h2>Traffic Flow Simulation</h2>
+        <p>Cars: <span id="car-count">0</span>/<span id="total-cars">100</span></p>
         <p>Cars Through: <span id="cars-through">0</span></p>
         <p>Status: <span id="status">Ready</span></p>
     </div>
@@ -67,18 +53,14 @@
         <button id="start-btn">Start Simulation</button>
         <button id="reset-btn">Reset</button>
         <div class="slider-container">
-            <label for="camera-height">Camera Height:</label>
-            <input type="range" id="camera-height" min="20" max="150" step="5" value="80">
-        </div>
-        <div class="slider-container">
             <label for="car-speed">Car Speed:</label>
             <input type="range" id="car-speed" min="0.5" max="3" step="0.1" value="1">
             <span id="car-speed-value">1</span>
         </div>
         <div class="slider-container">
             <label for="gate-count">Number of Gates:</label>
-            <input type="range" id="gate-count" min="4" max="12" step="1" value="6">
-            <span id="gate-count-value">6</span>
+            <input type="range" id="gate-count" min="1" max="5" step="1" value="2">
+            <span id="gate-count-value">2</span>
         </div>
         <div class="slider-container">
             <label for="car-count-slider">Number of Cars:</label>
@@ -86,48 +68,21 @@
             <span id="car-count-slider-value">100</span>
         </div>
         <button id="toggle-gates">Toggle All Gates</button>
-        <p>
-            <strong>Instructions:</strong><br>
-            - Click on gates to toggle open/closed<br>
-            - Use mouse wheel to zoom<br>
-            - Drag to rotate view
-        </p>
     </div>
 
     <script>
         // Main variables
-        let scene, camera, renderer;
-        let controls;
-        let cars = [], gates = [];
+        let scene, camera, renderer, cars = [], gates = [];
         let isSimulationRunning = false;
         let carsPassed = 0;
-        let totalTravelTime = 0;
-        let startTime = 0;
         let carCreationInterval;
-        let raycaster, mouse;
-
-        // Grid layout
-        const GRID_SIZE = 5; // 5x5 grid
-        const CELL_SIZE = 30; // size of each grid cell
-        const ROAD_WIDTH = 10; // width of roads
-        const BUILDING_MARGIN = 3; // space between buildings and roads
         
         // Simulation parameters
         let TOTAL_CARS = 100;
+        const ROAD_LENGTH = 100;
+        const ROAD_WIDTH = 20;
         const CAR_SIZE = 2;
         let carSpeed = 1;
-        
-        // Road network
-        let roadNetwork = {
-            intersections: [],
-            roads: []
-        };
-        
-        // Buildings
-        let buildings = [];
-        
-        // Start and end points
-        let startPoint, endPoint;
         
         // Initialize the scene
         function init() {
@@ -137,7 +92,7 @@
             
             // Create camera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 80, 80);
+            camera.position.set(0, 50, 50);
             camera.lookAt(0, 0, 0);
             
             // Create renderer
@@ -145,19 +100,8 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
             
-            // Add orbit controls
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.25;
-            controls.screenSpacePanning = false;
-            controls.maxPolarAngle = Math.PI / 2;
-            
-            // Setup raycaster for mouse interactions
-            raycaster = new THREE.Raycaster();
-            mouse = new THREE.Vector2();
-            
             // Create lights
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
             scene.add(ambientLight);
             
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -166,42 +110,35 @@
             scene.add(directionalLight);
             
             // Create ground
-            createGround();
+            const groundGeometry = new THREE.PlaneGeometry(150, 150);
+            const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x7CFC00 }); // Grass green
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.5;
+            scene.add(ground);
             
-            // Create neighborhood
-            createNeighborhood();
-            
-            // Set up start and end points
-            setupStartEndPoints();
+            // Create road
+            createRoad();
             
             // Create initial gates
-            createInitialGates();
+            createGate(-20, 0, 0);
+            createGate(20, 0, 0);
             
             // Add event listeners
             window.addEventListener('resize', onWindowResize);
-            window.addEventListener('click', onMouseClick);
             
             // Controls event listeners
             document.getElementById('start-btn').addEventListener('click', startSimulation);
             document.getElementById('reset-btn').addEventListener('click', resetSimulation);
             document.getElementById('toggle-gates').addEventListener('click', toggleAllGates);
             
-            // Camera height control
-            const cameraHeightSlider = document.getElementById('camera-height');
-            cameraHeightSlider.addEventListener('input', () => {
-                const height = parseInt(cameraHeightSlider.value);
-                camera.position.y = height;
-                camera.lookAt(0, 0, 0);
-            });
-            
-            // Car speed slider
+            // Sliders
             const carSpeedSlider = document.getElementById('car-speed');
             carSpeedSlider.addEventListener('input', () => {
                 carSpeed = parseFloat(carSpeedSlider.value);
                 document.getElementById('car-speed-value').textContent = carSpeed.toFixed(1);
             });
             
-            // Gate count slider
             const gateCountSlider = document.getElementById('gate-count');
             gateCountSlider.addEventListener('input', () => {
                 const gateCount = parseInt(gateCountSlider.value);
@@ -211,12 +148,11 @@
                 updateGateCount(gateCount);
             });
             
-            // Car count slider
             const carCountSlider = document.getElementById('car-count-slider');
             carCountSlider.addEventListener('input', () => {
                 TOTAL_CARS = parseInt(carCountSlider.value);
                 document.getElementById('car-count-slider-value').textContent = TOTAL_CARS;
-                document.getElementById('total-cars-display').textContent = TOTAL_CARS;
+                document.getElementById('total-cars').textContent = TOTAL_CARS;
             });
             
             // Initialize stats display
@@ -226,401 +162,35 @@
             animate();
         }
         
-        // Basic OrbitControls implementation to avoid external dependency
-        function OrbitControls(camera, domElement) {
-            this.camera = camera;
-            this.domElement = domElement;
-            this.target = new THREE.Vector3();
-            this.enableDamping = false;
-            this.dampingFactor = 0.05;
-            this.screenSpacePanning = true;
-            this.minDistance = 0;
-            this.maxDistance = Infinity;
-            this.maxPolarAngle = Math.PI;
-            
-            // Internal properties
-            let spherical = new THREE.Spherical();
-            let rotateStart = new THREE.Vector2();
-            let rotateEnd = new THREE.Vector2();
-            let rotateDelta = new THREE.Vector2();
-            let panStart = new THREE.Vector2();
-            let panEnd = new THREE.Vector2();
-            let panDelta = new THREE.Vector2();
-            let zoomStart = 0;
-            let zoomEnd = 0;
-            let zoomDelta = 0;
-            let state = 0; // 0: none, 1: rotate, 2: pan, 3: zoom
-            
-            // Event listeners
-            domElement.addEventListener('contextmenu', onContextMenu);
-            domElement.addEventListener('mousedown', onMouseDown);
-            domElement.addEventListener('wheel', onMouseWheel);
-            
-            // Event handlers
-            function onContextMenu(event) {
-                event.preventDefault();
-            }
-            
-            function onMouseDown(event) {
-                event.preventDefault();
-                
-                if (event.button === 0) { // left mouse button
-                    if (event.ctrlKey || event.metaKey || event.shiftKey) {
-                        state = 2; // pan
-                        panStart.set(event.clientX, event.clientY);
-                    } else {
-                        state = 1; // rotate
-                        rotateStart.set(event.clientX, event.clientY);
-                    }
-                } else if (event.button === 2) { // right mouse button
-                    state = 2; // pan
-                    panStart.set(event.clientX, event.clientY);
-                }
-                
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
-            }
-            
-            function onMouseMove(event) {
-                if (state === 1) { // rotate
-                    rotateEnd.set(event.clientX, event.clientY);
-                    rotateDelta.subVectors(rotateEnd, rotateStart);
-                    
-                    // Rotate
-                    const element = domElement;
-                    spherical.setFromVector3(camera.position.clone().sub(this.target));
-                    spherical.theta -= 2 * Math.PI * rotateDelta.x / element.clientWidth;
-                    spherical.phi -= 2 * Math.PI * rotateDelta.y / element.clientHeight;
-                    spherical.phi = Math.max(0.1, Math.min(this.maxPolarAngle, spherical.phi));
-                    
-                    camera.position.setFromSpherical(spherical).add(this.target);
-                    camera.lookAt(this.target);
-                    
-                    rotateStart.copy(rotateEnd);
-                } else if (state === 2) { // pan
-                    panEnd.set(event.clientX, event.clientY);
-                    panDelta.subVectors(panEnd, panStart);
-                    
-                    // Pan
-                    const offset = new THREE.Vector3();
-                    const position = camera.position.clone();
-                    offset.copy(position).sub(this.target);
-                    const targetDistance = offset.length();
-                    
-                    // Half of the fov is center to top of screen
-                    const panLeft = panRight = panUp = panDown = 0;
-                    const panSpeed = 0.001 * targetDistance;
-                    
-                    if (this.screenSpacePanning) {
-                        const right = camera.right.clone().multiplyScalar(panDelta.x * panSpeed);
-                        const up = camera.up.clone().multiplyScalar(panDelta.y * panSpeed);
-                        camera.position.add(right);
-                        camera.position.add(up);
-                        this.target.add(right);
-                        this.target.add(up);
-                    } else {
-                        const vec = new THREE.Vector3();
-                        vec.setFromMatrixColumn(camera.matrix, 0);
-                        vec.multiplyScalar(-panDelta.x * panSpeed);
-                        camera.position.add(vec);
-                        this.target.add(vec);
-                        
-                        vec.setFromMatrixColumn(camera.matrix, 1);
-                        vec.multiplyScalar(panDelta.y * panSpeed);
-                        camera.position.add(vec);
-                        this.target.add(vec);
-                    }
-                    
-                    panStart.copy(panEnd);
-                }
-            }
-            
-            function onMouseUp() {
-                state = 0;
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('mouseup', onMouseUp);
-            }
-            
-            function onMouseWheel(event) {
-                event.preventDefault();
-                
-                if (event.deltaY < 0) {
-                    dollyIn(1.1);
-                } else {
-                    dollyOut(1.1);
-                }
-            }
-            
-            function dollyIn(dollyScale) {
-                camera.position.sub(this.target).multiplyScalar(1 / dollyScale).add(this.target);
-            }
-            
-            function dollyOut(dollyScale) {
-                camera.position.sub(this.target).multiplyScalar(dollyScale).add(this.target);
-            }
-            
-            this.update = function() {
-                if (this.enableDamping) {
-                    // Apply damping
-                }
-            };
-        }
-        
-        function createGround() {
-            const groundSize = GRID_SIZE * CELL_SIZE * 2; // Make it bigger than the grid
-            const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize);
-            const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x7CFC00 }); // Grass green
-            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-            ground.rotation.x = -Math.PI / 2;
-            ground.position.y = -0.5;
-            scene.add(ground);
-        }
-        
-        function createNeighborhood() {
-            const gridOffset = (GRID_SIZE * CELL_SIZE) / 2 - CELL_SIZE / 2;
-            
-            // Create intersections and roads
-            for (let x = 0; x < GRID_SIZE; x++) {
-                for (let z = 0; z < GRID_SIZE; z++) {
-                    const xPos = x * CELL_SIZE - gridOffset;
-                    const zPos = z * CELL_SIZE - gridOffset;
-                    
-                    // Create intersection
-                    createIntersection(xPos, zPos);
-                    
-                    // Create roads connecting to adjacent intersections
-                    if (x < GRID_SIZE - 1) {
-                        createRoad(
-                            xPos, zPos,
-                            xPos + CELL_SIZE, zPos,
-                            ROAD_WIDTH
-                        );
-                    }
-                    if (z < GRID_SIZE - 1) {
-                        createRoad(
-                            xPos, zPos,
-                            xPos, zPos + CELL_SIZE,
-                            ROAD_WIDTH
-                        );
-                    }
-                    
-                    // Create building in this grid cell
-                    if (x > 0 && x < GRID_SIZE - 1 && z > 0 && z < GRID_SIZE - 1) {
-                        createBuilding(xPos, zPos);
-                    }
-                }
-            }
-        }
-        
-        function createIntersection(x, z) {
-            const size = ROAD_WIDTH * 1.2;
-            const geometry = new THREE.PlaneGeometry(size, size);
-            const material = new THREE.MeshLambertMaterial({ color: 0x333333 }); // Dark gray
-            const intersection = new THREE.Mesh(geometry, material);
-            intersection.rotation.x = -Math.PI / 2;
-            intersection.position.set(x, 0, z);
-            scene.add(intersection);
-            
-            // Add to road network
-            roadNetwork.intersections.push({
-                x: x,
-                z: z,
-                mesh: intersection,
-                connections: []
-            });
-            
-            return intersection;
-        }
-        
-        function createRoad(x1, z1, x2, z2, width) {
-            // Calculate road properties
-            const length = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(z2 - z1, 2));
-            const centerX = (x1 + x2) / 2;
-            const centerZ = (z1 + z2) / 2;
-            
-            // Calculate rotation angle
-            const angle = Math.atan2(z2 - z1, x2 - x1);
-            
-            // Create road mesh
-            const roadGeometry = new THREE.PlaneGeometry(length, width);
+        function createRoad() {
+            // Main road
+            const roadGeometry = new THREE.PlaneGeometry(ROAD_WIDTH, ROAD_LENGTH);
             const roadMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 }); // Dark gray
             const road = new THREE.Mesh(roadGeometry, roadMaterial);
             road.rotation.x = -Math.PI / 2;
-            road.rotation.z = -angle;
-            road.position.set(centerX, 0, centerZ);
             scene.add(road);
             
-            // Add lane markings
-            const lineGeometry = new THREE.PlaneGeometry(length * 0.8, 0.5);
+            // Road markings
+            const lineGeometry = new THREE.PlaneGeometry(1, ROAD_LENGTH - 10);
             const lineMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFFFF }); // White
             const line = new THREE.Mesh(lineGeometry, lineMaterial);
             line.rotation.x = -Math.PI / 2;
-            line.rotation.z = -angle;
-            line.position.set(centerX, 0.01, centerZ); // Slightly above road
+            line.position.y = 0.01; // Slightly above road
             scene.add(line);
             
-            // Add to road network
-            roadNetwork.roads.push({
-                start: { x: x1, z: z1 },
-                end: { x: x2, z: z2 },
-                center: { x: centerX, z: centerZ },
-                length: length,
-                angle: angle,
-                mesh: road
-            });
+            // Start point (A)
+            const startGeometry = new THREE.CylinderGeometry(3, 3, 1, 32);
+            const startMaterial = new THREE.MeshLambertMaterial({ color: 0x00FF00 }); // Green
+            const startPoint = new THREE.Mesh(startGeometry, startMaterial);
+            startPoint.position.set(0, 0, ROAD_LENGTH/2 - 5);
+            scene.add(startPoint);
             
-            // Find and update intersections connections
-            const startIntersection = roadNetwork.intersections.find(i => 
-                Math.abs(i.x - x1) < 0.1 && Math.abs(i.z - z1) < 0.1);
-            const endIntersection = roadNetwork.intersections.find(i => 
-                Math.abs(i.x - x2) < 0.1 && Math.abs(i.z - z2) < 0.1);
-            
-            if (startIntersection && endIntersection) {
-                startIntersection.connections.push(endIntersection);
-                endIntersection.connections.push(startIntersection);
-            }
-            
-            return road;
-        }
-        
-        function createBuilding(x, z) {
-            const buildingSize = CELL_SIZE - ROAD_WIDTH - BUILDING_MARGIN * 2;
-            
-            // Random height between 5 and 15
-            const height = Math.random() * 10 + 5;
-            
-            // Create building mesh
-            const buildingGeometry = new THREE.BoxGeometry(buildingSize, height, buildingSize);
-            
-            // Random building color
-            const colors = [0xA9A9A9, 0xD3D3D3, 0xB0C4DE, 0xDEB887, 0xFFE4C4, 0xF5DEB3];
-            const color = colors[Math.floor(Math.random() * colors.length)];
-            
-            const buildingMaterial = new THREE.MeshLambertMaterial({ color: color });
-            const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
-            
-            building.position.set(x, height / 2, z);
-            scene.add(building);
-            
-            // Add windows
-            addWindowsToBuilding(building, buildingSize, height);
-            
-            buildings.push(building);
-            return building;
-        }
-        
-        function addWindowsToBuilding(building, size, height) {
-            const windowSize = 1;
-            const windowGeometry = new THREE.PlaneGeometry(windowSize, windowSize);
-            const windowMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFF99 }); // Yellow light
-            
-            // Number of windows per side
-            const numWindows = Math.floor(size / (windowSize * 1.5));
-            const spacing = size / numWindows;
-            
-            // Number of floors
-            const numFloors = Math.floor(height / (windowSize * 1.5));
-            const floorSpacing = height / numFloors;
-            
-            // Add windows to each side
-            for (let floor = 0; floor < numFloors; floor++) {
-                const y = -height / 2 + floorSpacing / 2 + floor * floorSpacing;
-                
-                for (let i = 0; i < numWindows; i++) {
-                    // Only add windows to some positions (random)
-                    if (Math.random() > 0.3) {
-                        // Front side
-                        const windowFront = new THREE.Mesh(windowGeometry, windowMaterial);
-                        windowFront.position.set(
-                            -size / 2 + spacing / 2 + i * spacing, 
-                            y, 
-                            size / 2 + 0.1
-                        );
-                        building.add(windowFront);
-                        
-                        // Back side
-                        const windowBack = new THREE.Mesh(windowGeometry, windowMaterial);
-                        windowBack.position.set(
-                            size / 2 - spacing / 2 - i * spacing, 
-                            y, 
-                            -size / 2 - 0.1
-                        );
-                        windowBack.rotation.y = Math.PI;
-                        building.add(windowBack);
-                        
-                        // Left side
-                        const windowLeft = new THREE.Mesh(windowGeometry, windowMaterial);
-                        windowLeft.position.set(
-                            -size / 2 - 0.1, 
-                            y, 
-                            -size / 2 + spacing / 2 + i * spacing
-                        );
-                        windowLeft.rotation.y = -Math.PI / 2;
-                        building.add(windowLeft);
-                        
-                        // Right side
-                        const windowRight = new THREE.Mesh(windowGeometry, windowMaterial);
-                        windowRight.position.set(
-                            size / 2 + 0.1, 
-                            y, 
-                            size / 2 - spacing / 2 - i * spacing
-                        );
-                        windowRight.rotation.y = Math.PI / 2;
-                        building.add(windowRight);
-                    }
-                }
-            }
-        }
-        
-        function setupStartEndPoints() {
-            // Find a road intersection on the edge for start point (top left)
-            const startIntersection = roadNetwork.intersections.find(i => 
-                Math.abs(i.x - (-CELL_SIZE * (GRID_SIZE-1)/2)) < 0.1 && 
-                Math.abs(i.z - (-CELL_SIZE * (GRID_SIZE-1)/2)) < 0.1);
-                
-            // Find a road intersection on the opposite edge for end point (bottom right)
-            const endIntersection = roadNetwork.intersections.find(i => 
-                Math.abs(i.x - (CELL_SIZE * (GRID_SIZE-1)/2)) < 0.1 && 
-                Math.abs(i.z - (CELL_SIZE * (GRID_SIZE-1)/2)) < 0.1);
-            
-            if (startIntersection && endIntersection) {
-                // Create start point marker
-                const startGeometry = new THREE.CylinderGeometry(3, 3, 1, 32);
-                const startMaterial = new THREE.MeshLambertMaterial({ color: 0x00FF00 }); // Green
-                startPoint = new THREE.Mesh(startGeometry, startMaterial);
-                startPoint.position.set(startIntersection.x, 0.5, startIntersection.z);
-                scene.add(startPoint);
-                
-                // Create end point marker
-                const endGeometry = new THREE.CylinderGeometry(3, 3, 1, 32);
-                const endMaterial = new THREE.MeshLambertMaterial({ color: 0xFF0000 }); // Red
-                endPoint = new THREE.Mesh(endGeometry, endMaterial);
-                endPoint.position.set(endIntersection.x, 0.5, endIntersection.z);
-                scene.add(endPoint);
-                
-                // Save reference to actual intersections
-                startPoint.userData.intersection = startIntersection;
-                endPoint.userData.intersection = endIntersection;
-            }
-        }
-        
-        function createInitialGates() {
-            // Create a handful of gates at different intersections
-            const initialGatesCount = 6;
-            
-            const possibleIntersections = roadNetwork.intersections.filter(i => 
-                // Don't put gates at start or end points
-                !(i === startPoint?.userData.intersection || i === endPoint?.userData.intersection)
-            );
-            
-            // Shuffle array to get random intersections
-            possibleIntersections.sort(() => 0.5 - Math.random());
-            
-            // Create gates at selected intersections
-            for (let i = 0; i < Math.min(initialGatesCount, possibleIntersections.length); i++) {
-                const intersection = possibleIntersections[i];
-                createGate(intersection.x, 0, intersection.z);
-            }
+            // End point (B)
+            const endGeometry = new THREE.CylinderGeometry(3, 3, 1, 32);
+            const endMaterial = new THREE.MeshLambertMaterial({ color: 0xFF0000 }); // Red
+            const endPoint = new THREE.Mesh(endGeometry, endMaterial);
+            endPoint.position.set(0, 0, -ROAD_LENGTH/2 + 5);
+            scene.add(endPoint);
         }
         
         function createGate(x, y, z) {
@@ -641,30 +211,12 @@
             pole.position.y = 6;
             gateGroup.add(pole);
             
-            // Gate arms - create 4 arms for each direction
-            const directions = [0, Math.PI/2, Math.PI, -Math.PI/2];
-            const arms = [];
-            
-            for (let i = 0; i < directions.length; i++) {
-                const armGeometry = new THREE.BoxGeometry(ROAD_WIDTH / 2, 0.5, 0.5);
-                const armMaterial = new THREE.MeshLambertMaterial({ color: 0xFF0000 }); // Red
-                const arm = new THREE.Mesh(armGeometry, armMaterial);
-                arm.position.set(ROAD_WIDTH / 4, 5, 0);
-                
-                // Create a container for each arm that will handle rotation
-                const armContainer = new THREE.Group();
-                armContainer.rotation.y = directions[i]; // Point in different directions
-                armContainer.add(arm);
-                gateGroup.add(armContainer);
-                
-                arms.push({
-                    mesh: arm,
-                    container: armContainer,
-                    originalRotation: 0,
-                    openRotation: -Math.PI/2,
-                    isOpen: false
-                });
-            }
+            // Gate arm
+            const armGeometry = new THREE.BoxGeometry(ROAD_WIDTH/2 - 2, 0.5, 0.5);
+            const armMaterial = new THREE.MeshLambertMaterial({ color: 0xFF0000 }); // Red
+            const arm = new THREE.Mesh(armGeometry, armMaterial);
+            arm.position.set(ROAD_WIDTH/4 - 1, 10, 0);
+            gateGroup.add(arm);
             
             // Set position
             gateGroup.position.set(x, y, z);
@@ -672,20 +224,21 @@
             // Add to scene
             scene.add(gateGroup);
             
-            // Find the closest intersection to this gate
-            const closestIntersection = roadNetwork.intersections.find(i => 
-                Math.abs(i.x - x) < 0.1 && Math.abs(i.z - z) < 0.1
-            );
-            
             // Store gate properties
             const gate = {
                 mesh: gateGroup,
-                arms: arms,
-                intersection: closestIntersection,
-                isOpen: false
+                isOpen: false,
+                arm: arm,
+                originalRotation: arm.rotation.z,
+                openRotation: -Math.PI/2,
+                position: {x, y, z}
             };
             
             gates.push(gate);
+            
+            // Make gate clickable
+            gateGroup.userData.clickable = true;
+            gateGroup.userData.gate = gate;
             
             return gate;
         }
@@ -693,14 +246,12 @@
         function toggleGate(gate) {
             gate.isOpen = !gate.isOpen;
             
-            for (const arm of gate.arms) {
-                if (gate.isOpen) {
-                    // Animate to open position
-                    arm.mesh.rotation.z = arm.openRotation;
-                } else {
-                    // Animate to closed position
-                    arm.mesh.rotation.z = arm.originalRotation;
-                }
+            if (gate.isOpen) {
+                // Animate to open position
+                gate.arm.rotation.z = gate.openRotation;
+            } else {
+                // Animate to closed position
+                gate.arm.rotation.z = gate.originalRotation;
             }
         }
         
@@ -710,10 +261,7 @@
             gates.forEach(gate => {
                 // If some gates are closed, open all gates; otherwise, close all gates
                 gate.isOpen = someGatesClosed;
-                
-                for (const arm of gate.arms) {
-                    arm.mesh.rotation.z = gate.isOpen ? arm.openRotation : arm.originalRotation;
-                }
+                gate.arm.rotation.z = gate.isOpen ? gate.openRotation : gate.originalRotation;
             });
         }
         
@@ -726,44 +274,28 @@
             
             // Add new gates if needed
             while (gates.length < count) {
-                // Select a random intersection that doesn't already have a gate
-                // and is not a start or end point
-                const gatedIntersections = gates.map(g => g.intersection);
-                
-                const availableIntersections = roadNetwork.intersections.filter(i => 
-                    !gatedIntersections.includes(i) && 
-                    i !== startPoint?.userData.intersection && 
-                    i !== endPoint?.userData.intersection
-                );
-                
-                if (availableIntersections.length > 0) {
-                    const randomIndex = Math.floor(Math.random() * availableIntersections.length);
-                    const intersection = availableIntersections[randomIndex];
-                    createGate(intersection.x, 0, intersection.z);
-                } else {
-                    // No more available intersections
-                    break;
-                }
+                const zPos = (Math.random() * ROAD_LENGTH - ROAD_LENGTH/2) * 0.8;
+                createGate(Math.random() > 0.5 ? -ROAD_WIDTH/4 : ROAD_WIDTH/4, 0, zPos);
             }
         }
         
         function createCar() {
             // Car body
-            const carGeometry = new THREE.BoxGeometry(CAR_SIZE, CAR_SIZE/2, CAR_SIZE*1.5);
+            const carGeometry = new THREE.BoxGeometry(CAR_SIZE, CAR_SIZE/2, CAR_SIZE*2);
             
             // Random car color
-            const colors = [0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFFA500, 0x800080];
+            const colors = [0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF, 0x00FFFF];
             const carMaterial = new THREE.MeshLambertMaterial({ 
                 color: colors[Math.floor(Math.random() * colors.length)] 
             });
             
             const carMesh = new THREE.Mesh(carGeometry, carMaterial);
             
-            // Starting position (at start point)
+            // Starting position (point A)
             carMesh.position.set(
-                startPoint.position.x + (Math.random() * 4 - 2), // Add some randomness
+                (Math.random() * ROAD_WIDTH - ROAD_WIDTH/2) * 0.8, // Random x within road width
                 CAR_SIZE/4, // Half car height
-                startPoint.position.z + (Math.random() * 4 - 2) // Add some randomness
+                ROAD_LENGTH/2 // Start of road
             );
             
             scene.add(carMesh);
@@ -772,125 +304,12 @@
             const car = {
                 mesh: carMesh,
                 speed: carSpeed * (0.9 + Math.random() * 0.2), // Slight speed variation
-                startTime: Date.now() / 1000, // Start time in seconds
-                finished: false,
-                // Navigation properties
-                currentIntersection: startPoint.userData.intersection,
-                targetIntersection: null,
-                path: [],
-                progress: 0,
-                currentRoad: null
+                finished: false
             };
-            
-            // Find initial path
-            findPathForCar(car);
             
             cars.push(car);
             
             return car;
-        }
-        
-        function findPathForCar(car) {
-            // Simple A* pathfinding
-            const start = car.currentIntersection;
-            const end = endPoint.userData.intersection;
-            
-            // If already at the end, mark as finished
-            if (start === end) {
-                car.finished = true;
-                return;
-            }
-            
-            // Initialize data structures
-            const openSet = [start];
-            const cameFrom = new Map();
-            
-            // g score is the cost from start to current node
-            const gScore = new Map();
-            gScore.set(start, 0);
-            
-            // f score is the cost from start to end through current node
-            const fScore = new Map();
-            fScore.set(start, heuristic(start, end));
-            
-            while (openSet.length > 0) {
-                // Find node with lowest f score
-                let current = openSet[0];
-                let lowestFScore = fScore.get(current) || Infinity;
-                let currentIndex = 0;
-                
-                for (let i = 1; i < openSet.length; i++) {
-                    const score = fScore.get(openSet[i]) || Infinity;
-                    if (score < lowestFScore) {
-                        lowestFScore = score;
-                        current = openSet[i];
-                        currentIndex = i;
-                    }
-                }
-                
-                // If we reached the end, reconstruct path
-                if (current === end) {
-                    const path = [];
-                    let temp = current;
-                    
-                    while (cameFrom.has(temp)) {
-                        path.unshift(temp);
-                        temp = cameFrom.get(temp);
-                    }
-                    
-                    car.path = path;
-                    
-                    // Set next target intersection
-                    if (path.length > 0) {
-                        car.targetIntersection = path[0];
-                    }
-                    
-                    return;
-                }
-                
-                // Remove current from open set
-                openSet.splice(currentIndex, 1);
-                
-                // Check all neighbors
-                for (const neighbor of current.connections) {
-                    // Check if there's a gate blocking this intersection
-                    const isBlocked = gates.some(gate => 
-                        gate.intersection === current && !gate.isOpen
-                    );
-                    
-                    if (isBlocked) {
-                        continue; // Skip this neighbor if blocked by a gate
-                    }
-                    
-                    // Calculate tentative g score
-                    const tentativeGScore = (gScore.get(current) || Infinity) + 
-                        Math.sqrt(
-                            Math.pow(neighbor.x - current.x, 2) + 
-                            Math.pow(neighbor.z - current.z, 2)
-                        );
-                    
-                    if (tentativeGScore < (gScore.get(neighbor) || Infinity)) {
-                        // This is a better path, record it
-                        cameFrom.set(neighbor, current);
-                        gScore.set(neighbor, tentativeGScore);
-                        fScore.set(neighbor, tentativeGScore + heuristic(neighbor, end));
-                        
-                        // Add to open set if not already there
-                        if (!openSet.includes(neighbor)) {
-                            openSet.push(neighbor);
-                        }
-                    }
-                }
-            }
-            
-            // No path found
-            car.finished = true;
-            car.mesh.visible = false;
-        }
-        
-        function heuristic(a, b) {
-            // Simple euclidean distance
-            return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.z - b.z, 2));
         }
         
         function updateCars() {
@@ -899,146 +318,55 @@
                 
                 if (car.finished) continue;
                 
-                // Check if car has a current target
-                if (!car.targetIntersection) {
-                    // Need to find a new path
-                    findPathForCar(car);
-                    
-                    if (!car.targetIntersection) {
-                        // Still no target, might be blocked or at the end
-                        if (car.currentIntersection === endPoint.userData.intersection) {
-                            car.finished = true;
-                            car.mesh.visible = false;
-                            
-                            // Record statistics
-                            carsPassed++;
-                            const travelTime = (Date.now() / 1000) - car.startTime;
-                            totalTravelTime += travelTime;
-                            
-                            // Update stats display
-                            updateStats();
-                        }
-                        continue;
-                    }
+                // Move car forward
+                car.mesh.position.z -= car.speed;
+                
+                // Check for collisions with gates
+                const canPass = checkGatePassage(car);
+                
+                if (!canPass) {
+                    // Car can't pass, move it back
+                    car.mesh.position.z += car.speed;
                 }
                 
-                // Find or create the road between current and target
-                if (!car.currentRoad) {
-                    const current = car.currentIntersection;
-                    const target = car.targetIntersection;
+                // Check if car reached point B
+                if (car.mesh.position.z <= -ROAD_LENGTH/2) {
+                    car.finished = true;
+                    car.mesh.visible = false;
                     
-                    // Find road connecting these intersections
-                    car.currentRoad = roadNetwork.roads.find(r => 
-                        (Math.abs(r.start.x - current.x) < 0.1 && Math.abs(r.start.z - current.z) < 0.1 &&
-                         Math.abs(r.end.x - target.x) < 0.1 && Math.abs(r.end.z - target.z) < 0.1) ||
-                        (Math.abs(r.start.x - target.x) < 0.1 && Math.abs(r.start.z - target.z) < 0.1 &&
-                         Math.abs(r.end.x - current.x) < 0.1 && Math.abs(r.end.z - current.z) < 0.1)
-                    );
+                    // Record statistics
+                    carsPassed++;
                     
-                    car.progress = 0;
-                }
-                
-                // Move along current road
-                if (car.currentRoad) {
-                    const road = car.currentRoad;
-                    const current = car.currentIntersection;
-                    const target = car.targetIntersection;
-                    
-                    // Calculate direction based on which end is the target
-                    const movingForward = 
-                        Math.abs(road.end.x - target.x) < 0.1 && 
-                        Math.abs(road.end.z - target.z) < 0.1;
-                    
-                    // Update progress
-                    car.progress += car.speed / road.length;
-                    
-                    if (car.progress >= 1) {
-                        // Reached target intersection
-                        car.currentIntersection = car.targetIntersection;
-                        car.currentRoad = null;
-                        car.progress = 0;
-                        
-                        // Update position to exactly at the intersection
-                        car.mesh.position.set(
-                            car.currentIntersection.x,
-                            CAR_SIZE/4,
-                            car.currentIntersection.z
-                        );
-                        
-                        // Update path and target
-                        car.path.shift();
-                        car.targetIntersection = car.path.length > 0 ? car.path[0] : null;
-                        
-                        // Check if reached the end
-                        if (car.currentIntersection === endPoint.userData.intersection) {
-                            car.finished = true;
-                            car.mesh.visible = false;
-                            
-                            // Record statistics
-                            carsPassed++;
-                            const travelTime = (Date.now() / 1000) - car.startTime;
-                            totalTravelTime += travelTime;
-                            
-                            // Update stats display
-                            updateStats();
-                        }
-                    } else {
-                        // Interpolate position along the road
-                        const startPoint = movingForward ? road.start : road.end;
-                        const endPoint = movingForward ? road.end : road.start;
-                        
-                        const x = startPoint.x + (endPoint.x - startPoint.x) * car.progress;
-                        const z = startPoint.z + (endPoint.z - startPoint.z) * car.progress;
-                        
-                        car.mesh.position.set(x, CAR_SIZE/4, z);
-                        
-                        // Rotate car to face direction of travel
-                        const angle = Math.atan2(
-                            endPoint.z - startPoint.z,
-                            endPoint.x - startPoint.x
-                        );
-                        car.mesh.rotation.y = angle;
-                    }
-                } else {
-                    // No current road, try to find a new path
-                    findPathForCar(car);
+                    // Update stats display
+                    updateStats();
                 }
             }
         }
         
-        function onMouseClick(event) {
-            // Calculate mouse position in normalized device coordinates
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        function checkGatePassage(car) {
+            const carPos = car.mesh.position;
             
-            // Update the picking ray with the camera and mouse position
-            raycaster.setFromCamera(mouse, camera);
-            
-            // Find objects intersecting the picking ray
-            const intersects = raycaster.intersectObjects(scene.children, true);
-            
-            // Check if we clicked on a gate
-            for (let i = 0; i < intersects.length; i++) {
-                const object = intersects[i].object;
-                let parent = object.parent;
+            for (const gate of gates) {
+                const gatePos = gate.position;
                 
-                // Find the top-level parent
-                while (parent && parent !== scene) {
-                    const gate = gates.find(g => g.mesh === parent);
-                    if (gate) {
-                        toggleGate(gate);
-                        return;
-                    }
-                    parent = parent.parent;
+                // Check if car is near the gate
+                const dist = Math.abs(carPos.z - gatePos.z);
+                
+                if (dist < CAR_SIZE && 
+                    Math.abs(carPos.x - gatePos.x) < ROAD_WIDTH/4) {
+                    // Car is at the gate, check if gate is open
+                    return gate.isOpen;
                 }
             }
+            
+            // No gate blocking
+            return true;
         }
         
         function startSimulation() {
             if (isSimulationRunning) return;
             
             isSimulationRunning = true;
-            startTime = Date.now() / 1000;
             document.getElementById('status').textContent = 'Running';
             document.getElementById('start-btn').textContent = 'Pause Simulation';
             document.getElementById('start-btn').removeEventListener('click', startSimulation);
@@ -1058,9 +386,6 @@
                 if (cars.length >= TOTAL_CARS) {
                     clearInterval(carCreationInterval);
                 }
-                
-                // Update the total cars display
-                document.getElementById('total-cars-display').textContent = TOTAL_CARS;
                 
                 // Check if all cars have finished
                 if (carsPassed >= TOTAL_CARS) {
@@ -1096,16 +421,12 @@
             
             // Reset statistics
             carsPassed = 0;
-            totalTravelTime = 0;
             
             // Reset display
             document.getElementById('status').textContent = 'Ready';
             document.getElementById('start-btn').textContent = 'Start Simulation';
             document.getElementById('start-btn').removeEventListener('click', pauseSimulation);
             document.getElementById('start-btn').addEventListener('click', startSimulation);
-            
-            // Update the total cars display
-            document.getElementById('total-cars-display').textContent = TOTAL_CARS;
             
             updateStats();
         }
@@ -1125,11 +446,6 @@
         function updateStats() {
             document.getElementById('car-count').textContent = cars.length;
             document.getElementById('cars-through').textContent = carsPassed;
-            
-            if (carsPassed > 0) {
-                const avgTime = totalTravelTime / carsPassed;
-                document.getElementById('avg-time').textContent = avgTime.toFixed(1);
-            }
         }
         
         function onWindowResize() {
@@ -1145,11 +461,40 @@
                 updateCars();
             }
             
-            // Update controls
-            controls.update();
-            
             renderer.render(scene, camera);
         }
         
-        // Start everything
-        init();
+        // Wait for page to fully load before starting
+        window.addEventListener('load', init);
+        
+        // Add click event detection for gates
+        window.addEventListener('click', (event) => {
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            
+            // Calculate mouse position in normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // Update the picking ray with the camera and mouse position
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Calculate objects intersecting the picking ray
+            const intersects = raycaster.intersectObjects(scene.children, true);
+            
+            for (let i = 0; i < intersects.length; i++) {
+                const object = intersects[i].object;
+                let parent = object.parent;
+                
+                while (parent) {
+                    if (parent.userData && parent.userData.clickable) {
+                        toggleGate(parent.userData.gate);
+                        break;
+                    }
+                    parent = parent.parent;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
