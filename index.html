@@ -121,8 +121,8 @@
             createRoad();
             
             // Create initial gates
-            createGate(-20, 0, 0);
-            createGate(20, 0, 0);
+            createGate(0, 0, 30); // Place gate directly in road path
+            createGate(0, 0, -10); // Place second gate in road path
             
             // Add event listeners
             window.addEventListener('resize', onWindowResize);
@@ -212,10 +212,10 @@
             gateGroup.add(pole);
             
             // Gate arm
-            const armGeometry = new THREE.BoxGeometry(ROAD_WIDTH/2 - 2, 0.5, 0.5);
+            const armGeometry = new THREE.BoxGeometry(ROAD_WIDTH + 4, 0.5, 0.5);
             const armMaterial = new THREE.MeshLambertMaterial({ color: 0xFF0000 }); // Red
             const arm = new THREE.Mesh(armGeometry, armMaterial);
-            arm.position.set(ROAD_WIDTH/4 - 1, 10, 0);
+            arm.position.set(0, 10, 0); // Center the arm on the road
             gateGroup.add(arm);
             
             // Set position
@@ -278,8 +278,9 @@
             
             // Add new gates if needed
             while (gates.length < count) {
+                // Position gates along the central road path
                 const zPos = (Math.random() * ROAD_LENGTH - ROAD_LENGTH/2) * 0.8;
-                createGate(Math.random() > 0.5 ? -ROAD_WIDTH/4 : ROAD_WIDTH/4, 0, zPos);
+                createGate(0, 0, zPos); // Place gate in middle of road
             }
         }
         
@@ -359,12 +360,12 @@
                 // Check if car is near the gate
                 const dist = Math.abs(carPos.z - gatePos.z);
                 
-                if (dist < CAR_SIZE && 
-                    Math.abs(carPos.x - gatePos.x) < ROAD_WIDTH/3) {
+                // Narrower check since gate is now directly in path
+                if (dist < CAR_SIZE) {
                     // Car is at the gate, check if gate is open
                     // If gate is closed, car cannot pass
                     if (!gate.isOpen) {
-                        console.log("Car stopped by gate at", gatePos);
+                        console.log("Car stopped by gate at z:", gatePos.z);
                         return false;
                     }
                 }
